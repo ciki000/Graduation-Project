@@ -1,5 +1,36 @@
 import torch
 import torch.nn as nn
+from torch.autograd import Variable
+from  torchvision import utils as vutils
+from PIL import Image
+import argparse
+import os
+
+from load_data import *
+from roi_pooling import roi_pooling_ims
+
+ap = argparse.ArgumentParser()
+ap.add_argument("-i", "--input", default='./demo/',
+                help="path to the input folder")
+ap.add_argument("-m", "--model", default='./fh02.pth',
+                help="path to the model file")
+args = vars(ap.parse_args())
+
+use_gpu = torch.cuda.is_available()
+numClasses = 7
+numPoints = 4
+imgSize = (480, 480)
+batchSize = 1
+resume_file = str(args["model"])
+
+
+provNum, alphaNum, adNum = 38, 25, 35
+provinces = ["皖", "沪", "津", "渝", "冀", "晋", "蒙", "辽", "吉", "黑", "苏", "浙", "京", "闽", "赣", "鲁", "豫", "鄂", "湘", "粤", "桂",
+             "琼", "川", "贵", "云", "藏", "陕", "甘", "青", "宁", "新", "警", "学", "O"]
+alphabets = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'J', 'K', 'L', 'M', 'N', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W',
+             'X', 'Y', 'Z', 'O']
+ads = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'J', 'K', 'L', 'M', 'N', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X',
+       'Y', 'Z', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'O']
 
 class wR2(nn.Module):
     def __init__(self, num_classes=1000):
@@ -181,10 +212,69 @@ class fh02(nn.Module):
         y6 = self.classifier7(_rois)
         return boxLoc, [y0, y1, y2, y3, y4, y5, y6]
 
+def save_image(t, name):
+    dir = 'FGSM_results'
+    if not os.path.exists(dir):
+      os.makedirs(dir)
+    vutils.save_image(t * 255, './FGSM_results/test.jpg')
+    '''
+    img = t.cpu().clone()  # we clone the tensor to not do changes on it
+    img = img.squeeze(0)  # remove the fake batch dimension
+    img = unloader(img)
+    if not os.exists(dir):
+        os.makedirs(dir)
+    img.save('./'+dir+name)
+    '''
 
-class FGSM(nn.Module):
-    def __init__(self, model):
-        super().__init__()
-        self.model = model
-        self.device = torch.device("cuda" if (torch.cuda.is_available()) else "cpu")
+def train(model, x, labels, eps=0.3):
+    x_new = x + torch.Tensor(np.random.uniform(-eps, eps, x.shape)).type_as(x).cuda()
+    x_new = Variable(x_new, requires_grad=True)
+    loss_func = nn.CrossEntropyLoss()
+    fps_pred, y_pred = model(x_new)
     
+    loss = loss_func(y_pred, labels)
+    model.zero_grad()
+    loss.backward()
+    grad = x_new.grad.cpu().detach().numpy()
+    grad = np.sign(grad)
+    pertubation = grad * eps
+    adv_x = x.cpu().detach().numpy() + pertubation
+    adv_x = np.clip(adv_x,self.clip_min,self.clip_max)
+    return adv_x
+
+
+
+model_conv = fh02(numPoints, numClasses)
+model_conv = torch.nn.DataParallel(model_conv, device_ids=range(torch.cuda.device_count()))
+model_conv.load_state_dict(torch.load(resume_file))
+model_conv = model_conv.cuda()
+model_conv.eval()
+##print(model_conv)
+
+dst = demoTestDataLoader(args["input"].split(','), imgSize)
+trainloader = DataLoader(dst, batch_size=1, num_workers=1)
+'''
+##for i, data in enumerate(trainloader):
+##    print(data)
+
+##start = time()
+for i, (XI, ims) in enumerate(trainloader):
+
+    if use_gpu:
+        x = Variable(XI.cuda(0))
+    else:
+        x = Variable(XI)
+    print(x.size())
+    fps_pred, y_pred = model_conv(x)
+
+    outputY = [el.data.cpu().numpy().tolist() for el in y_pred]
+    labelPred = [t[0].index(max(t[0])) for t in outputY]
+    ##print(provinces[labelPred[0]], alphabets[labelPred[1]], [ads[labelPred[i]] for i in range(2, 7)])
+'''
+for i, (XI, ims) in enumerate(trainloader):
+    if use_gpu:
+        x = Variable(XI.cuda(0))
+    else:
+        x = Variable(XI)
+    save_image(x, str(i))
+    ##FGSM(model_conv, x)
