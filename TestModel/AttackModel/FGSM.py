@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import numpy as np
 from torch.autograd import Variable
 from  torchvision import utils as vutils
 from PIL import Image
@@ -214,17 +215,12 @@ class fh02(nn.Module):
 
 def save_image(t, name):
     dir = 'FGSM_results'
+    img = t.cpu().squeeze().numpy()
+    img = np.transpose(img * 255, (1,2,0))
     if not os.path.exists(dir):
       os.makedirs(dir)
-    vutils.save_image(t * 255, './FGSM_results/test.jpg')
-    '''
-    img = t.cpu().clone()  # we clone the tensor to not do changes on it
-    img = img.squeeze(0)  # remove the fake batch dimension
-    img = unloader(img)
-    if not os.exists(dir):
-        os.makedirs(dir)
-    img.save('./'+dir+name)
-    '''
+    cv2.imwrite('./'+dir+'/test'+name+'.jpg', img)
+    
 
 def train(model, x, labels, eps=0.3):
     x_new = x + torch.Tensor(np.random.uniform(-eps, eps, x.shape)).type_as(x).cuda()
