@@ -222,20 +222,48 @@ def save_image(t, name):
     cv2.imwrite('./'+dir+'/test'+name+'.jpg', img)
     
 
-def train(model, x, labels, eps=0.3):
-    x_new = x + torch.Tensor(np.random.uniform(-eps, eps, x.shape)).type_as(x).cuda()
+def FGSM(model, x, labels, eps=0.3, clip_min=0.0, clip_max=1.0):
+    x_new = x #+ torch.Tensor(np.random.uniform(-eps, eps, x.shape)).type_as(x).cuda()
     x_new = Variable(x_new, requires_grad=True)
     loss_func = nn.CrossEntropyLoss()
     fps_pred, y_pred = model(x_new)
     
-    loss = loss_func(y_pred, labels)
+    #pred_y = torch.tensor(y_pred).cuda()
+    
+    #print(type(y_pred))
+    #print(type(labels))
+    loss = 0
+    for j in range(7):
+
+        l = torch.tensor([labels[j]]).cuda()
+        loss += loss_func(y_pred[j], l)
+    print(loss)
+    return 0
     model.zero_grad()
     loss.backward()
     grad = x_new.grad.cpu().detach().numpy()
     grad = np.sign(grad)
     pertubation = grad * eps
     adv_x = x.cpu().detach().numpy() + pertubation
-    adv_x = np.clip(adv_x,self.clip_min,self.clip_max)
+    adv_x = np.clip(adv_x, clip_min, clip_max)
+
+    x_adv = torch.from_numpy(adv_x).cuda()
+    new_fps_pred, new_y_pred = model(x_adv)
+    
+    #pred_y = torch.tensor(y_pred).cuda()
+    
+    #print(type(y_pred))
+    #print(type(labels))
+    loss = 0
+    for j in range(7):
+
+        l = torch.tensor([labels[j]]).cuda()
+        loss += loss_func(new_y_pred[j], l)
+    print(loss)
+    print(labels)
+    new_outputY = [el.data.cpu().numpy().tolist() for el in new_y_pred]
+    new_labelPred = [t[0].index(max(t[0])) for t in new_outputY]
+    print(new_labelPred)
     return adv_x
 
 
@@ -272,5 +300,22 @@ for i, (XI, ims) in enumerate(trainloader):
         x = Variable(XI.cuda(0))
     else:
         x = Variable(XI)
-    save_image(x, str(i))
-    ##FGSM(model_conv, x)
+    #save_image(x, str(i)+'old')
+    fps_pred, y_pred = model_conv(x)
+    outputY = [el.data.cpu().numpy().tolist() for el in y_pred]
+    labelPred = [t[0].index(max(t[0])) for t in outputY]
+    print(provinces[labelPred[0]], alphabets[labelPred[1]], [ads[labelPred[i]] for i in range(2, 7)])
+    fake_labels = torch.tensor(labelPred).cuda()
+    FGSM(model_conv, x, fake_labels)
+    #print(type(fps_pred))
+    #print(y_pred))
+    #print(fps_pred)
+    #print(y_pred[0])
+    '''
+    outputY = [el.data.cpu().numpy().tolist() for el in y_pred]
+    labelPred = [t[0].index(max(t[0])) for t in outputY]
+    fake_labels = torch.tensor(labelPred).cuda()
+    FGSM(model_conv, x, fake_labels)
+    save_image(x, str(i)+'new')
+    '''
+    
