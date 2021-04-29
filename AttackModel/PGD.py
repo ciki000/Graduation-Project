@@ -11,9 +11,9 @@ from load_data import *
 from roi_pooling import roi_pooling_ims
 
 ap = argparse.ArgumentParser()
-ap.add_argument("-i", "--input", default='./demo/',
+ap.add_argument("-i", "--input", default='/home/featurize/Proj/Datasets/Test',
                 help="path to the input folder")
-ap.add_argument("-m", "--model", default='./fh02.pth',
+ap.add_argument("-m", "--model", default='/home/featurize/Proj/Pretrain/fh02.pth',
                 help="path to the model file")
 args = vars(ap.parse_args())
 
@@ -214,113 +214,43 @@ class fh02(nn.Module):
         return boxLoc, [y0, y1, y2, y3, y4, y5, y6]
 
 def save_image(t, name):
-    dir = 'PGD_results'
+    dir = '/home/featurize/zwk/Datasets/test_PGD/'
     img = t.cpu().squeeze().numpy()
     img = np.transpose(img * 255, (1,2,0))
     if not os.path.exists(dir):
       os.makedirs(dir)
-    cv2.imwrite('./'+dir+'/test'+name+'.jpg', img)
+    cv2.imwrite(dir+name, img)
     
 def FGSM(model, x, labels, id, eps=0.01, clip_min=0.0, clip_max=1.0):
     x_new = x #+ torch.Tensor(np.random.uniform(-eps, eps, x.shape)).type_as(x).cuda()
     x_new = Variable(x_new, requires_grad=True)
     loss_func = nn.CrossEntropyLoss()
     fps_pred, y_pred = model(x_new)
-    #print(x.shape)
     loss = 0
     for j in range(7):
         l = torch.tensor([labels[j]]).cuda()
         loss += loss_func(y_pred[j], l)
-    #print(loss)
 
     model.zero_grad()
     loss.backward()
     grad = x_new.grad.cpu().detach().numpy()
-    #print(grad.shape)
-    #np.savetxt('grad', grad)
     grad = np.sign(grad)
     pertubation = grad * eps
     adv_x = x.cpu().detach().numpy() + pertubation
     adv_x = np.clip(adv_x, clip_min, clip_max)
 
     x_adv = torch.from_numpy(adv_x).cuda()
-    adv_fps_pred, adv_y_pred = model(x_adv)
-    ##save_image(x, str(id))
-    ##save_image(x_adv, str(id)+'_adv')
-    adv_loss = 0
-    for j in range(7):
-
-        l = torch.tensor([labels[j]]).cuda()
-        adv_loss += loss_func(adv_y_pred[j], l)
-    #print(adv_loss)
-    adv_outputY = [el.data.cpu().numpy().tolist() for el in adv_y_pred]
-    adv_labelPred = [t[0].index(max(t[0])) for t in adv_outputY]
-    #print(provinces[labels[0]], alphabets[labels[1]], [ads[labels[i]] for i in range(2, 7)])
-    #print(provinces[adv_labelPred[0]], alphabets[adv_labelPred[1]], [ads[adv_labelPred[i]] for i in range(2, 7)])
-    ##print()
     return x_adv
 
-def PGD(model, x, labels, id, iter=20, eps=0.001, clip_min=0.0, clip_max=1.0):
-    save_image(x, str(id))
+def PGD(model, x, labels, img, iter=20, eps=0.001, clip_min=0.0, clip_max=1.0):
     
     for i in range(iter):
         x = FGSM(model, x, labels, id, eps=eps)
 
-    save_image(x, str(id)+'_adv')
-    fps_pred, y_pred = model_conv(x)
-    outputY = [el.data.cpu().numpy().tolist() for el in y_pred]
-    labelPred = [t[0].index(max(t[0])) for t in outputY]
-    print(provinces[labelPred[0]], alphabets[labelPred[1]], [ads[labelPred[i]] for i in range(2, 7)])
-    print()
+    save_image(x, img)
 
-
-
-
-
-def PGD1(model, x, labels, id, iter=20, eps=0.01, clip_min=0.0, clip_max=1.0):
-    x_new = x #+ torch.Tensor(np.random.uniform(-eps, eps, x.shape)).type_as(x).cuda()
-    x_new = Variable(x_new, requires_grad=True).cuda(0)
-    x_new.retain_grad()
-    loss_func = nn.CrossEntropyLoss()
-    
-
-    for i in range(iter):
-        tmp_fps_pred, tmp_y_pred = model(x_new)
-        loss = 0
-        for j in range(7):
-            l = torch.tensor([labels[j]]).cuda()
-            loss += loss_func(tmp_y_pred[j], l)
-        print(loss)
-        
-        
-        loss.backward()
-        grad_tensor = x_new.grad
-        print(type(x_new))
-        print(type(grad_tensor))
-        grad = grad_tensor.cpu().detach().numpy()
-        grad = np.sign(grad)
-        pertubation = grad * eps
-        adv_x = x.cpu().detach().numpy() + pertubation
-        adv_x = np.clip(adv_x, clip_min, clip_max)
-        x_new = torch.from_numpy(adv_x).cuda()
-        model.zero_grad()
-
-    adv_fps_pred, adv_y_pred = model(x_new)
-    #save_image(x, str(id))
-    #save_image(x_adv, str(id)+'_adv')
-    adv_loss = 0
-    for j in range(7):
-
-        l = torch.tensor([labels[j]]).cuda()
-        adv_loss += loss_func(adv_y_pred[j], l)
-    print(adv_loss)
-    adv_outputY = [el.data.cpu().numpy().tolist() for el in adv_y_pred]
-    adv_labelPred = [t[0].index(max(t[0])) for t in adv_outputY]
-    print(provinces[labels[0]], alphabets[labels[1]], [ads[labels[i]] for i in range(2, 7)])
-    print(provinces[adv_labelPred[0]], alphabets[adv_labelPred[1]], [ads[adv_labelPred[i]] for i in range(2, 7)])
-    print()
-    return adv_x
-
+def printlicence(label):
+    print(provinces[label[0]], alphabets[label[1]], [ads[label[i]] for i in range(2, 7)])
 
 
 model_conv = fh02(numPoints, numClasses)
@@ -329,20 +259,22 @@ model_conv.load_state_dict(torch.load(resume_file))
 model_conv = model_conv.cuda()
 model_conv.eval()
 
-dst = demoTestDataLoader(args["input"].split(','), imgSize)
+dst = labelTestDataLoader(args["input"].split(','), imgSize)
 trainloader = DataLoader(dst, batch_size=1, num_workers=1)
 
-for i, (XI, ims) in enumerate(trainloader):
+for i, (XI, labels, ims) in enumerate(trainloader):
+    
+    YI = [int(num) for num in labels[0].split('_')]
+    img = ims[0].split('/')[-1]
+    
     if use_gpu:
         x = Variable(XI.cuda(0))
     else:
         x = Variable(XI)
 
-    fps_pred, y_pred = model_conv(x)
-    outputY = [el.data.cpu().numpy().tolist() for el in y_pred]
-    labelPred = [t[0].index(max(t[0])) for t in outputY]
-    print(provinces[labelPred[0]], alphabets[labelPred[1]], [ads[labelPred[i]] for i in range(2, 7)])
-    
-    fake_labels = torch.tensor(labelPred).cuda(0)
-    PGD(model_conv, x, fake_labels, i)
+    labels_GT = torch.tensor(YI).cuda(0)
+    PGD(model_conv, x, labels_GT, img)
+    if (i%1000 == 0):
+        print(i, 'ok')
+        
     
