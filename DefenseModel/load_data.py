@@ -65,7 +65,48 @@ class labelTestDataLoader(Dataset):
         lbl = img_name.split('/')[-1].split('.')[0].split('-')[-3]
         return resizedImage, lbl, img_name
 
+class labelAEDataLoader(Dataset):
+    def __init__(self, img_dir, advimg_dir,imgSize, is_transform=None):
+        self.img_dir = img_dir
+        self.advimg_dir = advimg_dir
+        if (len(img_dir) != len(advimg_dir)):
+            raise Exception("Dataset ERROR")
+        self.img_paths = []
+        for i in range(len(img_dir)):
+            self.img_paths += [el for el in paths.list_images(img_dir[i])]
+        self.advimg_paths = []
+        for i in range(len(advimg_dir)):
+            self.advimg_paths += [el for el in paths.list_images(advimg_dir[i])]
+        # self.img_paths = os.listdir(img_dir)
+        # print self.img_paths
+        self.img_size = imgSize
+        self.is_transform = is_transform
 
+    def __len__(self):
+        return len(self.img_paths)
+
+    def __getitem__(self, index):
+        img_name = self.img_paths[index]
+        advimg_name = self.advimg_paths[index]
+        if (img_name.split('/')[-1] != advimg_name.split('/')[-1]):
+            raise Exception("Dataset ERROR")
+
+        img = cv2.imread(img_name)
+        # img = img.astype('float32')
+        resizedImage = cv2.resize(img, self.img_size)
+        resizedImage = np.transpose(resizedImage, (2,0,1))
+        resizedImage = resizedImage.astype('float32')
+        resizedImage /= 255.0
+        
+        advimg = cv2.imread(advimg_name)
+        # img = img.astype('float32')
+        resizedAdvImage = cv2.resize(advimg, self.img_size)
+        resizedAdvImage = np.transpose(resizedAdvImage, (2,0,1))
+        resizedAdvImage = resizedAdvImage.astype('float32')
+        resizedAdvImage /= 255.0
+
+        lbl = img_name.split('/')[-1].split('.')[0].split('-')[-3]
+        return resizedImage, resizedAdvImage, lbl, img_name
 
 class ChaLocDataLoader(Dataset):
     def __init__(self, img_dir,imgSize, is_transform=None):
